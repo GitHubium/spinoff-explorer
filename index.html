@@ -343,7 +343,7 @@
 
     nodeEnter.append("circle")
       .attr("r", function (d) {
-        return Math.sqrt((d.votes - 1) ? d.votes + 40 : 0.9)
+        return Math.sqrt((d.votes - 1) ? d.votes + 50 : 1)
       })
       .on("click", click)
       .on("mouseover", d => {
