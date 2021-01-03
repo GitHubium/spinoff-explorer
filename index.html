@@ -484,7 +484,7 @@
   });
 
   window.setInterval(() => {
-    if (!updated && new Date() - lastUpdated > 5000 || numOpenRequests === 0) {
+    if (!updated && new Date() - lastUpdated > 500) {
       updated = true;
       update();
     }
