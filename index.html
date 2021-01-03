@@ -67,7 +67,6 @@
       margin-right: auto
     }
 
-
     .dropbtn {
       background-color: #4CAF50;
       color: white;
@@ -165,7 +164,6 @@
     checkSearch(param);
   }
 
-
   var updated = false;
   var nodeLabelMode = "votes";
   var tree = {};
@@ -177,12 +175,16 @@
   var spinoffTopLimit = 1000;
   var currentlySearched = null;
   var isPinned = false;
+  var numOpenRequests = 0;
 
   function spinoffs(id, branch) {
     fetch(
       `https://www.khanacademy.org/api/internal/scratchpads/Scratchpad:${id}/top-forks?casing=camel&subject=all&sort=1&page=0&limit=${spinoffTopLimit}&subject=all`, { headers: {}, method: "GET", mode: "cors" })
       .then(r => r.json())
       .then(d => {
+        numOpenRequests --;
+
+        
 
         // Resursive search
         d.scratchpads.forEach(s => {
@@ -209,10 +211,14 @@
               console.log('heyyy"');
               leaf.children.push({
                 name: "+" + (s.spinoffCount - spinoffTopLimit) + "\nmore",
-                votes: (s.spinoffCount - spinoffTopLimit),
+                votes: 0,
+                spinoffs: 0,
                 id: "overflow",
+                modified: new Date(),
+                modifiedTimestamp: new Date().getTime(),
               })
             }
+            numOpenRequests ++;
             spinoffs(id, leaf);
           }
         })
@@ -245,12 +251,16 @@
             if (d.spinoffCount > spinoffTopLimit) {
               tree.children.push({
                 name: "+" + (d.spinoffCount - spinoffTopLimit) + "\nmore",
-                votes: (d.spinoffCount - spinoffTopLimit),
+                votes: 0,
+                spinoffs: 0,
                 id: "overflow",
+                modified: new Date(),
+                modifiedTimestamp: new Date().getTime(),
               })
             }
 
 
+            numOpenRequests ++;
             spinoffs(d.id, tree);
           }
         })
@@ -314,6 +324,8 @@
       .call(force.drag);
 
     let maxVotes, maxSpinoffs, deltaTime, newest;
+    maxVotes = 1;
+    maxSpinoffs = 1;
     let currentTimestamp = new Date().getTime();
     if (nodeLabelMode === "votes") {
       maxVotes = Math.max.apply(Math, nodes.map(function (o) { return o.votes; }));
@@ -339,6 +351,7 @@
         hover(d)
       })
       .style("stroke", d => {
+        console.log(d.spinoffs , maxSpinoffs,(Math.sqrt(d.votes / maxVotes)));
         switch (nodeLabelMode) {
           case "title": return (d.votes - 1) ? "#3182bd" : "gray";
           case "votes": return blueToGreen(Math.sqrt(d.votes / maxVotes));
@@ -361,9 +374,9 @@
         if (d.id == "overflow") return d.name;
 
         switch (nodeLabelMode) {
-          case "title": return d.name;
-          case "votes": return d.votes;
-          case "spinoffs": return d.spinoffs;
+          case "title": return (d.name.slice(0, 11) == "Spin-off of") ? "" : d.name;
+          case "votes": return (d.votes===1) ? "" : d.votes;
+          case "spinoffs": return (d.spinoffs===0) ? "" : d.spinoffs;
           case "modified": return nodes.length > 500 ? d.modified.slice(0, 4) : d.modified.slice(0, 4);
           default: return "";
         }
@@ -427,7 +440,7 @@
   }
 
   function blueToGreen(val) {
-    val = Math.min(Math.max(1, val), 0);
+    val = Math.min(Math.max(0, val), 1);
     if (val < 0.5) {
       return `rgb(0, ${parseInt(val * 255 * 2)}, 255)`;
     } else {
@@ -471,12 +484,10 @@
   });
 
   window.setInterval(() => {
-    if (!updated && new Date() - lastUpdated > 200) {
+    if (!updated && new Date() - lastUpdated > 5000 || numOpenRequests === 0) {
       updated = true;
       update();
     }
   }, 100);
-
 </script>
-
 </html>
