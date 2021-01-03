@@ -1,9 +1,11 @@
 <!DOCTYPE html>
+
 <head>
   <meta charset="utf-8">
   <title>KA Spinoff Explorer</title>
   <script src="https://d3js.org/d3.v3.min.js"></script>
   <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+
   <style>
     html,
     body {
@@ -12,10 +14,12 @@
       background-color: black;
       overflow: hidden;
     }
+
     .node circle {
       cursor: pointer;
       stroke-width: 2px;
     }
+
     .node text {
       color: black;
       pointer-events: none;
@@ -27,26 +31,31 @@
       -o-user-select: none;
       user-select: none;
     }
+
     .link {
       fill: none;
       stroke: white;
       stroke-width: 1.5px;
       opacity: 15%;
     }
+
     #both-cards {
       top: 2%;
       left: 2%;
       position: absolute;
       padding: 5px;
     }
+
     .card {
       border-radius: 6px;
       margin-top: 5px;
     }
+
     #pro-card,
     #closeButton {
       display: none;
     }
+
     #pro-img {
       width: 200px;
       height: 200px;
@@ -57,18 +66,70 @@
       margin-left: auto;
       margin-right: auto
     }
+
+
+    .dropbtn {
+      background-color: #4CAF50;
+      color: white;
+      padding: 8px;
+      font-size: 16px;
+      border: none;
+    }
+
+    .dropdown {
+      margin-top: 5px;
+      position: relative;
+      display: inline-block;
+    }
+
+    .dropdown-content {
+      display: none;
+      position: absolute;
+      background-color: #f1f1f1;
+      min-width: 160px;
+      box-shadow: 0px 8px 16px 0px rgba(0, 0, 0, 0.2);
+      z-index: 1;
+    }
+
+    .dropdown-content a {
+      color: black;
+      padding: 12px 16px;
+      text-decoration: none;
+      display: block;
+    }
+
+    .dropdown-content a:hover {
+      background-color: #ddd;
+    }
+
+    .dropdown:hover .dropdown-content {
+      display: block;
+    }
+
+    .dropdown:hover .dropbtn {
+      background-color: #3e8e41;
+    }
   </style>
 </head>
 
 <body>
   <div id="both-cards">
-
     <div class="card" style="width: 18rem;">
       <div class="card-body">
-
         <h5 class="card-title">Search by ID</h5>
         <input type="text" id="id-input" onkeyup="checkSearch(this.value)" placeholder="9 - 16 digit number">
-
+        <div>
+          <div class="dropdown">
+            <button class="btn-sm dropbtn" id="labelModeButton">Votes</button>
+            <div class="dropdown-content">
+              <a href="#" onclick="labelMode('none')">None</a>
+              <a href="#" onclick="labelMode('title')">Title</a>
+              <a href="#" onclick="labelMode('votes')">Votes</a>
+              <a href="#" onclick="labelMode('spinoffs')">Spin-offs</a>
+              <a href="#" onclick="labelMode('modified')">Last Updated</a>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
     <div class="card" style="width: 18rem;" id="pro-card">
@@ -78,8 +139,8 @@
         </button>
       </div>
       <a id="pro-img-container" href="#" target="_blank">
-      <img class="card-img-top" id="pro-img">
-    </a>
+        <img class="card-img-top" id="pro-img">
+      </a>
       <div class="card-body">
         <h5 class="card-title" id="pro-title"></h5>
         <p class="card-text">Created <span id="pro-created"></span> by <a id="pro-author" target="_blank"></a>. Last
@@ -92,23 +153,23 @@
       </ul>
     </div>
   </div>
-  <svg style="position:absolute;left:0;top:0;z-index:-1"></svg>
 
 </body>
 
 <script>
+  // Read query parameters
+  parameters = window.location.href.split("?");
+  let param = parameters[parameters.length - 1];
+  if (!isNaN(param)) {
+    document.getElementById("id-input").value = param;
+    checkSearch(param);
+  }
 
 
-
-
-
-
-
-
-
-
-
+  var updated = false;
+  var nodeLabelMode = "title";
   var tree = {};
+  var link;
   var width = 1;
   var height = 1;
   var force;
@@ -116,7 +177,6 @@
   var spinoffTopLimit = 1000;
   var currentlySearched = null;
   var isPinned = false;
-
 
   function spinoffs(id, branch) {
     fetch(
@@ -133,6 +193,7 @@
             votes: s.sumVotesIncremented,
             spinoffs: s.spinoffCount,
             modified: s.created,
+            modifiedTimestamp: new Date(s.created).getTime(),
             id: id,
             kaid: s.authorKaid
           }
@@ -140,6 +201,7 @@
           branch.children.push(leaf);
 
           lastUpdated = new Date();
+          updated = false;
 
           if (s.spinoffCount) {
             leaf.children = [];
@@ -153,9 +215,6 @@
             }
             spinoffs(id, leaf);
           }
-
-
-
         })
       })
       .catch(console.error);
@@ -180,6 +239,7 @@
               id: d.id,
               kaid: d.kaid,
               modified: d.created,// Bug in KA's API, scratchpad.created actually returns date last modified 
+              modifiedTimestamp: new Date(d.created).getTime(),
               children: []
             }
             if (d.spinoffCount > spinoffTopLimit) {
@@ -199,26 +259,25 @@
     }
   }
 
-
-  var svg = d3.select("svg");
-  svg.attr("height", window.innerHeight);
-  svg.attr("width", window.innerWidth);
-  width = parseInt(svg.style("width"));
-  height = parseInt(svg.style("height"));
-  console.log('w', width)
-  var root;
-  var link = svg.selectAll(".link"),
-    node = svg.selectAll(".node");
-  force = d3.layout.force()
-    .size([width, height])
-    .on("tick", tick)
-    .charge(-50);
-
-  root = tree;
-  update();
+  function init() {
+    svg = d3.select("body").append("svg").style("position", "absolute").style("left", "0").style("top", "0").style("z-index", "-1");
+    svg.attr("height", window.innerHeight);
+    svg.attr("width", window.innerWidth);
+    width = parseInt(svg.style("width"));
+    height = parseInt(svg.style("height"));
+    console.log('w', width)
+    link = svg.selectAll(".link"),
+      node = svg.selectAll(".node");
+    force = d3.layout.force()
+      .size([width, height])
+      .on("tick", tick)
+      .charge(-50);
+    update();
+  }
+  init();
 
   function update() {
-    var nodes = flatten(root),
+    var nodes = flatten(tree),
       links = d3.layout.tree().links(nodes);
 
     // Restart the force layout.
@@ -254,14 +313,41 @@
       .attr("class", "node")
       .call(force.drag);
 
+    let maxVotes, maxSpinoffs, deltaTime, newest;
+    let currentTimestamp = new Date().getTime();
+    if (nodeLabelMode === "votes") {
+      maxVotes = Math.max.apply(Math, nodes.map(function (o) { return o.votes; }));
+    } else if (nodeLabelMode === "spinoffs") {
+      maxSpinoffs = Math.max.apply(Math, nodes.map(function (o) { return o.spinoffs; }));
+    } else if (nodeLabelMode === "modified") {
+      let oldest = currentTimestamp;
+      newest = 0;
+      for (let node of nodes) {
+        oldest = Math.min(oldest, node.modifiedTimestamp);
+        newest = Math.max(newest, node.modifiedTimestamp);
+      }
+      deltaTime = newest - oldest;
+    }
+
     nodeEnter.append("circle")
-      .attr("r", function (d) { return Math.sqrt((d.votes - 1) ? d.votes + 40 : 0.9) })
+      .attr("r", function (d) {
+        return Math.sqrt((d.votes - 1) ? d.votes + 40 : 0.9)
+      })
       .on("click", click)
       .on("mouseover", d => {
         if (isPinned) return;
         hover(d)
       })
-      .style("stroke", d => (d.votes - 1) ? "#3182bd" : "gray");
+      .style("stroke", d => {
+        switch (nodeLabelMode) {
+          case "title": return (d.votes - 1) ? "#3182bd" : "gray";
+          case "votes": return blueToGreen(Math.sqrt(d.votes / maxVotes));
+          case "spinoffs": return blueToGreen(Math.sqrt(d.spinoffs / maxSpinoffs));
+          case "modified": return blueToGreen((newest - d.modifiedTimestamp) / deltaTime);
+          default: return (d.votes - 1) ? "#3182bd" : "gray";
+        }
+
+      });
 
     nodeEnter.append("title")
       .text(function (d) { return d.name; });
@@ -273,7 +359,14 @@
       .style('fill', d => (d.id == "overflow") ? "red" : "white")
       .text(function (d) {
         if (d.id == "overflow") return d.name;
-        if (d.votes && d.votes > 1) return d.votes;
+
+        switch (nodeLabelMode) {
+          case "title": return d.name;
+          case "votes": return d.votes;
+          case "spinoffs": return d.spinoffs;
+          case "modified": return nodes.length > 500 ? d.modified.slice(0, 4) : d.modified.slice(0, 4);
+          default: return "";
+        }
         return "";
         //if (!d.name || d.name.slice(0, 11) == "Spin-off of") return "";
         //return d.name;
@@ -333,6 +426,27 @@
     document.getElementById("closeButton").style.display = "none";
   }
 
+  function blueToGreen(val) {
+    val = Math.min(Math.max(1, val), 0);
+    if (val < 0.5) {
+      return `rgb(0, ${parseInt(val * 255 * 2)}, 255)`;
+    } else {
+      return `rgb(0, 255, ${parseInt((1 - val) * 255 * 2)})`;
+    }
+  }
+
+
+
+  function labelMode(mode) {
+    function capitalizeFirstLetter(string) {
+      return string.charAt(0).toUpperCase() + string.slice(1);
+    }
+    document.getElementById("labelModeButton").innerHTML = capitalizeFirstLetter(mode);
+    nodeLabelMode = mode;
+    d3.select("svg").remove();
+    init();
+  }
+
 
   // Returns a list of all nodes under the root.
   function flatten(root) {
@@ -357,11 +471,12 @@
   });
 
   window.setInterval(() => {
-    if (new Date() - lastUpdated > 200) {
-      root = tree;
+    if (!updated && new Date() - lastUpdated > 200) {
+      updated = true;
       update();
     }
   }, 100);
 
 </script>
+
 </html>
