@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<head>
+  <meta charset="utf-8">
+  <title>KA Spinoff Explorer</title>
+  <script src="https://d3js.org/d3.v3.min.js"></script>
+  <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+  <style>
+    html,
+    body {
+      margin: 0;
+      padding: 0;
+      background-color: black;
+      overflow: hidden;
+    }
+    .node circle {
+      cursor: pointer;
+      stroke-width: 2px;
+    }
+    .node text {
+      color: black;
+      pointer-events: none;
+      font-family: Verdana;
+      font-size: 10px;
+      -webkit-user-select: none;
+      -khtml-user-select: none;
+      -moz-user-select: none;
+      -o-user-select: none;
+      user-select: none;
+    }
+    .link {
+      fill: none;
+      stroke: white;
+      stroke-width: 1.5px;
+      opacity: 15%;
+    }
+    #both-cards {
+      top: 2%;
+      left: 2%;
+      position: absolute;
+      padding: 5px;
+    }
+    .card {
+      border-radius: 6px;
+      margin-top: 5px;
+    }
+    #pro-card,
+    #closeButton {
+      display: none;
+    }
+    #pro-img {
+      width: 200px;
+      height: 200px;
+      border: rgb(165, 165, 165) solid 2px;
+      border-radius: 3px;
+      margin-top: 5px;
+      display: block;
+      margin-left: auto;
+      margin-right: auto
+    }
+  </style>
+</head>
+
+<body>
+  <div id="both-cards">
+
+    <div class="card" style="width: 18rem;">
+      <div class="card-body">
+
+        <h5 class="card-title">Search by ID</h5>
+        <input type="text" id="id-input" onkeyup="checkSearch(this.value)" placeholder="9 - 16 digit number">
+
+      </div>
+    </div>
+    <div class="card" style="width: 18rem;" id="pro-card">
+      <div class="card-header bg-transparent border-bottom-0">
+        <button class="close" aria-label="Close" onclick="closeProCard()" id="closeButton">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <a id="pro-img-container" href="#" target="_blank">
+      <img class="card-img-top" id="pro-img">
+    </a>
+      <div class="card-body">
+        <h5 class="card-title" id="pro-title"></h5>
+        <p class="card-text">Created <span id="pro-created"></span> by <a id="pro-author" target="_blank"></a>. Last
+          modified <span id="pro-modified"></span></p>
+      </div>
+      <ul class="list-group list-group-flush">
+        <li class="list-group-item"><span id="pro-votes"></span> votes</li>
+        <li class="list-group-item"><span id="pro-spinoffs"></span> spin-offs</li>
+        <li class="list-group-item"><span id="pro-loc"></span> lines of code</li>
+      </ul>
+    </div>
+  </div>
+  <svg style="position:absolute;left:0;top:0;z-index:-1"></svg>
+
+</body>
+
+<script>
+
+
+
+
+
+
+
+
+
+
+
+  var tree = {};
+  var width = 1;
+  var height = 1;
+  var force;
+  var lastUpdated = new Date();
+  var spinoffTopLimit = 1000;
+  var currentlySearched = null;
+  var isPinned = false;
+
+
+  function spinoffs(id, branch) {
+    fetch(
+      `https://www.khanacademy.org/api/internal/scratchpads/Scratchpad:${id}/top-forks?casing=camel&subject=all&sort=1&page=0&limit=${spinoffTopLimit}&subject=all`, { headers: {}, method: "GET", mode: "cors" })
+      .then(r => r.json())
+      .then(d => {
+
+        // Resursive search
+        d.scratchpads.forEach(s => {
+
+          let id = s.url.substring(s.url.lastIndexOf("/") + 1);
+          let leaf = {
+            name: s.title,
+            votes: s.sumVotesIncremented,
+            spinoffs: s.spinoffCount,
+            modified: s.created,
+            id: id,
+            kaid: s.authorKaid
+          }
+
+          branch.children.push(leaf);
+
+          lastUpdated = new Date();
+
+          if (s.spinoffCount) {
+            leaf.children = [];
+            if (s.spinoffCount > spinoffTopLimit) {
+              console.log('heyyy"');
+              leaf.children.push({
+                name: "+" + (s.spinoffCount - spinoffTopLimit) + "\nmore",
+                votes: (s.spinoffCount - spinoffTopLimit),
+                id: "overflow",
+              })
+            }
+            spinoffs(id, leaf);
+          }
+
+
+
+        })
+      })
+      .catch(console.error);
+  }
+
+
+
+  function checkSearch(val) {
+    if (currentlySearched != Number(val) && !isNaN(Number(val)) && (val.length === 9 || val.length === 10 || val.length === 16)) {
+      currentlySearched = Number(val);
+      fetch(
+        `https://www.khanacademy.org/api/internal/scratchpads/${val}`, { headers: {}, method: "GET", mode: "cors" })
+        .then(r => r.json())
+        .then(d => {
+          if (d != null) {
+            lastUpdated = new Date();
+
+            tree = {
+              name: d.title,
+              spinoffs: d.spinoffCount,
+              votes: d.sumVotesIncremented,
+              id: d.id,
+              kaid: d.kaid,
+              modified: d.created,// Bug in KA's API, scratchpad.created actually returns date last modified 
+              children: []
+            }
+            if (d.spinoffCount > spinoffTopLimit) {
+              tree.children.push({
+                name: "+" + (d.spinoffCount - spinoffTopLimit) + "\nmore",
+                votes: (d.spinoffCount - spinoffTopLimit),
+                id: "overflow",
+              })
+            }
+
+
+            spinoffs(d.id, tree);
+          }
+        })
+        .catch(console.error);
+
+    }
+  }
+
+
+  var svg = d3.select("svg");
+  svg.attr("height", window.innerHeight);
+  svg.attr("width", window.innerWidth);
+  width = parseInt(svg.style("width"));
+  height = parseInt(svg.style("height"));
+  console.log('w', width)
+  var root;
+  var link = svg.selectAll(".link"),
+    node = svg.selectAll(".node");
+  force = d3.layout.force()
+    .size([width, height])
+    .on("tick", tick)
+    .charge(-50);
+
+  root = tree;
+  update();
+
+  function update() {
+    var nodes = flatten(root),
+      links = d3.layout.tree().links(nodes);
+
+    // Restart the force layout.
+    force
+      .nodes(nodes)
+      .links(links)
+      .start();
+
+    // Update the links…
+    link = link.data(links, function (d) { return d.target.id; });
+
+    // Exit any old links.
+    link.exit().remove();
+
+    // Enter any new links.
+    link.enter().insert("line", ".node")
+      .attr("class", "link")
+      .attr("x1", function (d) { return d.source.x; })
+      .attr("y1", function (d) { return d.source.y; })
+      .attr("x2", function (d) { return d.target.x; })
+      .attr("y2", function (d) { return d.target.y; });
+
+
+    // Update the nodes…
+    node = node.data(nodes, function (d) { return d.id; });
+
+    // Exit any old nodes.
+    node.exit().remove();
+
+    // Enter any new nodes.
+    let nodeEnter = node.enter()
+      .append("g")
+      .attr("class", "node")
+      .call(force.drag);
+
+    nodeEnter.append("circle")
+      .attr("r", function (d) { return Math.sqrt((d.votes - 1) ? d.votes + 40 : 0.9) })
+      .on("click", click)
+      .on("mouseover", d => {
+        if (isPinned) return;
+        hover(d)
+      })
+      .style("stroke", d => (d.votes - 1) ? "#3182bd" : "gray");
+
+    nodeEnter.append("title")
+      .text(function (d) { return d.name; });
+
+    nodeEnter.append("text")
+      .attr("dx", 0)
+      .attr("dy", ".35em")
+      .attr("text-anchor", "middle")
+      .style('fill', d => (d.id == "overflow") ? "red" : "white")
+      .text(function (d) {
+        if (d.id == "overflow") return d.name;
+        if (d.votes && d.votes > 1) return d.votes;
+        return "";
+        //if (!d.name || d.name.slice(0, 11) == "Spin-off of") return "";
+        //return d.name;
+      });
+
+  }
+
+  function tick() {
+    link.attr("x1", function (d) { return d.source.x; })
+      .attr("y1", function (d) { return d.source.y; })
+      .attr("x2", function (d) { return d.target.x; })
+      .attr("y2", function (d) { return d.target.y; });
+    node.attr("transform", function (d) { return "translate(" + d.x + "," + d.y + ")"; });
+
+  }
+
+  function hover(a) {
+    document.getElementById("pro-card").style.display = "flex";
+    document.getElementById("pro-img").src = `https://www.khanacademy.org/cs/-/${a.id}/latest.png`;
+    document.getElementById("pro-img-container").href = `https://www.khanacademy.org/cs/-/${a.id}`;
+    document.getElementById("pro-title").innerHTML = a.name;
+    document.getElementById("pro-author").innerHTML = "...";
+    document.getElementById("pro-author").href = `https://www.khanacademy.org/profile/${a.kaid}`;
+    document.getElementById("pro-created").innerHTML = "...";
+    document.getElementById("pro-modified").innerHTML = a.modified.slice(0, 10);
+    document.getElementById("pro-votes").innerHTML = a.votes;
+    document.getElementById("pro-spinoffs").innerHTML = a.spinoffs;
+    document.getElementById("pro-loc").innerHTML = "...";
+  }
+
+
+  function click(a) {
+    isPinned = true;
+    hover(a, true);
+    document.getElementById("closeButton").style.display = "block";
+
+    fetch(
+      `https://www.khanacademy.org/api/internal/scratchpads/${a.id}`, { headers: {}, method: "GET", mode: "cors" })
+      .then(r => r.json())
+      .then(d => {
+        document.getElementById("pro-loc").innerHTML = d.revision.code.split("\n").length;
+        document.getElementById("pro-created").innerHTML = d.created.slice(0, 10);
+      }).catch(console.error);
+
+    fetch(
+      `https://www.khanacademy.org/api/internal/user/profile?kaid=${a.kaid}`, { headers: {}, method: "GET", mode: "cors" })
+      .then(r => r.json())
+      .then(d => {
+        document.getElementById("pro-author").innerHTML = d.nickname;
+      })
+      .catch(console.error);
+  }
+
+  function closeProCard() {
+    isPinned = false;
+    document.getElementById("pro-card").style.display = "none";
+    document.getElementById("closeButton").style.display = "none";
+  }
+
+
+  // Returns a list of all nodes under the root.
+  function flatten(root) {
+    var nodes = [], i = 0;
+
+    function recurse(node) {
+      if (node.children) node.children.forEach(recurse);
+      if (!node.id) node.id = ++i;
+      nodes.push(node);
+    }
+
+    recurse(root);
+    return nodes;
+  }
+
+  window.addEventListener('resize', () => {
+    svg.attr("height", window.innerHeight);
+    svg.attr("width", window.innerWidth);
+    width = parseInt(svg.style("width"));
+    height = parseInt(svg.style("height"));
+    force.size([width, height])
+  });
+
+  window.setInterval(() => {
+    if (new Date() - lastUpdated > 200) {
+      root = tree;
+      update();
+    }
+  }, 100);
+
+</script>
+</html>
